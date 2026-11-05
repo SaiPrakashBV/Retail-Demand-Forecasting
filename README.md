@@ -14,4 +14,5 @@
 | 3. FastAPI backend | `backend/app`: routes, services, repositories, schemas, models; product search, sales/prices, forecasts, inventory, analytics, reports (CSV/Excel), pipeline status, async training jobs with API key |
 | 4. Forecasting | `ml/`: demand candidates XGBoost (global) vs Prophet (per product) backtested on the same folds, best one used per run; separate price model (XGBoost vs naive last-regular) for products with price history; MLflow runs, registry `production` alias; forecast worker processing async jobs |
 | 5. Inventory & reports | Reorder point / safety stock / MOQ / pack-size recommendations with stock-out dates and explanations; forecast-vs-actual accuracy (backtest and production); CSV/Excel reports |
+| 6. React frontend | `frontend/`: Vite + React + TypeScript + Material UI + Recharts; dashboard, product catalog search, product details (demand, price, forecast vs actual, inventory, daily table), forecasts and training, inventory reorders, reports, pipeline status; light/dark themes |
 

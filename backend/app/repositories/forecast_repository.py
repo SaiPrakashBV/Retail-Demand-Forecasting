@@ -33,7 +33,10 @@ def product_forecast(conn: Connection, run_id: str, product_id: int) -> list[dic
     return fetch_all(conn, """
         SELECT f.forecast_date AS date, f.demand_prediction AS demand, f.demand_lower, f.demand_upper,
                f.price_prediction AS price, f.price_lower, f.price_upper, f.price_status, f.generated_at,
-               s.units AS actual_units, s.avg_price AS actual_avg_price, ph.actual_price
+               -- a past day without a sales row sold zero units; future days are not yet observed
+               CASE WHEN f.forecast_date <= (SELECT max(sale_date) FROM daily_product_sales)
+                    THEN COALESCE(s.units, 0) END AS actual_units,
+               s.avg_price AS actual_avg_price, ph.actual_price
         FROM forecasts f
         LEFT JOIN daily_product_sales s ON s.product_id = f.product_id AND s.sale_date = f.forecast_date
         LEFT JOIN price_history ph ON ph.product_id = f.product_id AND ph.price_date = f.forecast_date
