@@ -1,10 +1,18 @@
 [project]
-name = "retail-forecast"
-version = "0.1.0"
-description = "Retail sales analytics and 30-day per-product demand forecasting with XGBoost and MLflow"
-requires-python = ">=3.11"
+name = "retail-sales-forecasting"
+version = "0.2.0"
+description = "Retail sales analytics, demand and price forecasting, and inventory planning"
+requires-python = ">=3.12"
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
 testpaths = ["tests"]
-filterwarnings = ["ignore::DeprecationWarning", "ignore::FutureWarning"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::FutureWarning",
+    "ignore:You should not use the 'timeout' argument:Warning",
+]
+markers = ["integration: needs a PostgreSQL database (TEST_DATABASE_URL)"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
