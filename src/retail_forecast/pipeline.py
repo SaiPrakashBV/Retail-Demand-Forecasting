@@ -176,11 +176,14 @@ def run(settings: Settings | None = None) -> dict:
         version = str(info.registered_model_version)
         promoted = _promote_if_better(client, s.registered_model, version, overall["backtest_wape"])
         mlflow.set_tag("promoted_to_champion", str(promoted).lower())
+        champion_version = client.get_model_version_by_alias(s.registered_model, CHAMPION).version
 
     model_info = {
         "run_id": run_id, "run_name": run_name, "experiment": s.experiment,
+        "experiment_id": active.info.experiment_id,
         "registered_model": s.registered_model, "model_version": version,
-        "promoted_to_champion": promoted, "trained_at": datetime.now(timezone.utc).isoformat(),
+        "promoted_to_champion": promoted, "champion_version": str(champion_version),
+        "trained_at": datetime.now(timezone.utc).isoformat(),
         "data_end": last_date.date().isoformat(), "horizon": s.horizon,
         "forecast_start": fc["date"].min().date().isoformat(),
         "forecast_end": fc["date"].max().date().isoformat(),

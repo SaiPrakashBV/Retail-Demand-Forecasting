@@ -1,4 +1,4 @@
-.PHONY: up down retrain logs test train-local api-local clean
+.PHONY: up down retrain logs test train-local api-local dashboard-local clean
 
 up:            ## Build and start postgres, MLflow, the training job and the API
 	docker compose up -d --build
@@ -10,7 +10,7 @@ retrain:       ## Run the training job again; the API picks up new outputs autom
 	docker compose run --rm trainer
 
 logs:
-	docker compose logs -f trainer api mlflow
+	docker compose logs -f trainer api dashboard mlflow
 
 test:
 	python -m pytest -q
@@ -20,6 +20,9 @@ train-local:   ## Train without Docker (tracks to ./mlflow.db)
 
 api-local:
 	PYTHONPATH=src uvicorn retail_forecast.api:app --reload --port 8000
+
+dashboard-local:
+	cd dashboard && API_URL=http://localhost:8000 streamlit run app.py
 
 clean:         ## Remove generated data/outputs and all MLflow volumes
 	docker compose down -v

@@ -87,6 +87,27 @@ services:
       retries: 10
     restart: unless-stopped
 
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard.Dockerfile
+    image: retail-forecast-dashboard:latest
+    environment:
+      API_URL: http://api:8000
+      # Browser-facing MLflow URL used for links in the dashboard.
+      MLFLOW_UI_URL: ${MLFLOW_UI_URL:-http://localhost:5000}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${DASHBOARD_PORT:-8501}:8501"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
 volumes:
   pg-data:
   mlflow-artifacts:

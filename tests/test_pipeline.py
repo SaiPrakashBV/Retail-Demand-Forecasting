@@ -84,6 +84,8 @@ def test_api_serves_outputs(tmp_path, monkeypatch, sales):
     from retail_forecast.analytics import save_analytics
 
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setenv("DATA_PATH", str(tmp_path / "sales.csv"))
+    sales.to_csv(tmp_path / "sales.csv", index=False)
     save_analytics(compute_analytics(sales), tmp_path / "analytics")
     fc = DemandForecaster(params=FAST_PARAMS).fit(sales).forecast(sales, 30)
     fc = fc.assign(lower=fc["forecast"] * 0.8, upper=fc["forecast"] * 1.2, run_id="test")
@@ -104,3 +106,6 @@ def test_api_serves_outputs(tmp_path, monkeypatch, sales):
     assert len(client.get("/forecast").json()) == 6
     assert client.get("/analytics/summary").json()["n_products"] == 6
     assert client.get("/model").json()["run_id"] == "test"
+    hist = client.get("/history/P001?days=14").json()
+    assert len(hist) == 14 and {"date", "units_sold"} <= set(hist[0])
+    assert client.get("/history/NOPE").status_code == 404

@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 from .config import get_settings
+from .data import validate_and_clean
 
 settings = get_settings()
 app = FastAPI(
@@ -50,6 +51,10 @@ def _forecast() -> pd.DataFrame:
 
 def _analytics_csv(name: str) -> pd.DataFrame:
     return cache.get(settings.analytics_dir / f"{name}.csv", pd.read_csv)
+
+
+def _sales() -> pd.DataFrame:
+    return cache.get(settings.data_path, lambda p: validate_and_clean(pd.read_csv(p)))
 
 
 def _json(path: Path) -> dict:
@@ -104,7 +109,8 @@ def products(category: str | None = None, abc_class: str | None = Query(None, pa
 
 @app.get("/forecast")
 def forecast_summary(category: str | None = None) -> list[dict]:
-    """Total forecast units per product over the horizon."""
+    """Total forecast units per product over the horizon, next to actuals for the same-length
+    window just before it (``recent_actual``) when the sales history is available."""
     fc = _forecast()
     if category:
         fc = fc[fc["category"].str.lower() == category.lower()]
@@ -112,9 +118,15 @@ def forecast_summary(category: str | None = None) -> list[dict]:
              .agg(total_forecast=("forecast", "sum"), total_lower=("lower", "sum"),
                   total_upper=("upper", "sum"), avg_daily=("forecast", "mean"),
                   start=("date", "min"), end=("date", "max"))
-             .round({"total_forecast": 2, "total_lower": 2, "total_upper": 2, "avg_daily": 2})
              .reset_index())
-    return _records(agg)
+    if settings.data_path.exists():
+        sales = _sales()
+        horizon = int(fc.groupby("product_id").size().max()) if len(fc) else 0
+        recent = sales[sales["date"] > sales["date"].max() - pd.Timedelta(days=horizon)]
+        agg["recent_actual"] = agg["product_id"].map(recent.groupby("product_id")["units_sold"].sum())
+        agg["change_vs_recent"] = (agg["total_forecast"] / agg["recent_actual"] - 1).round(4)
+    cols = {"total_forecast": 2, "total_lower": 2, "total_upper": 2, "avg_daily": 2, "recent_actual": 2}
+    return _records(agg.round({c: d for c, d in cols.items() if c in agg}))
 
 
 @app.get("/forecast/{product_id}", response_model=ProductForecast)
@@ -131,6 +143,17 @@ def forecast_product(product_id: str) -> ProductForecast:
         run_id=str(g["run_id"].iloc[0]),
         points=_records(g[["date", "forecast", "lower", "upper", "price", "on_promo"]]),
     )
+
+
+@app.get("/history/{product_id}")
+def history(product_id: str, days: int = Query(180, ge=1, le=3650)) -> list[dict]:
+    """Daily actuals for one product (most recent ``days``), for plotting next to the forecast."""
+    sales = _sales()
+    g = sales[sales["product_id"] == product_id]
+    if g.empty:
+        raise HTTPException(404, f"No sales history for product {product_id!r}")
+    g = g[g["date"] > g["date"].max() - pd.Timedelta(days=days)]
+    return _records(g[["date", "units_sold", "price", "on_promo"]])
 
 
 @app.get("/analytics/summary")

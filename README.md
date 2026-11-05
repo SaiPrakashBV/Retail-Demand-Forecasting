@@ -2,12 +2,13 @@
 
 A 30-day demand forecast for every product, made by a single global **XGBoost** model.
 Every training run is tracked in **MLflow** (params, backtest metrics, plots and a
-registered model), and the whole stack runs with **Docker Compose**.
+registered model), a **Streamlit** dashboard shows the forecasts and sales analytics,
+and the whole stack runs with **Docker Compose**.
 
 ```
 ┌──────────┐    ┌──────────────────────┐    ┌───────────────┐
-│ postgres │◄───│ mlflow (UI :5000)    │◄───│ trainer (job) │── outputs/ ──► api (:8000)
-└──────────┘    │ registry + artifacts │    └───────────────┘   forecast.csv  FastAPI
+│ postgres │◄───│ mlflow (UI :5000)    │◄───│ trainer (job) │── outputs/ ──► api (:8000) ──► dashboard (:8501)
+└──────────┘    │ registry + artifacts │    └───────────────┘   forecast.csv  FastAPI        Streamlit
                 └──────────────────────┘                        analytics/
 ```
 
@@ -17,6 +18,7 @@ registered model), and the whole stack runs with **Docker Compose**.
 | `mlflow`   | Tracking server + UI; proxies artifact uploads into the `mlflow-artifacts` volume |
 | `trainer`  | One-shot job: analytics → rolling backtest → final fit → 30-day forecast → MLflow logging and registration, then it exits |
 | `api`      | FastAPI service that serves forecasts and analytics from `outputs/` and reloads them when they change |
+| `dashboard`| Streamlit app over the API: product forecasts, portfolio view, sales analytics, model metrics |
 
 ## Quick start
 
@@ -27,11 +29,13 @@ make up                # = docker compose up -d --build
 
 - MLflow UI: http://localhost:5000 (experiment `retail-demand-forecast`, model `retail-demand-xgb`)
 - API docs: http://localhost:8000/docs
+- Dashboard: http://localhost:8501
 
 If `data/sales.csv` doesn't exist, the trainer generates a realistic synthetic dataset:
 40 products in 5 categories over 3 years, with trend, weekly and yearly seasonality,
 US-holiday effects, promotions with price elasticity, and some intermittent products.
-To retrain later, run `make retrain` (`docker compose run --rm trainer`).
+To retrain later, run `make retrain` (`docker compose run --rm trainer`). Note that
+`make up` also runs the trainer each time it starts the stack.
 
 ## Bring your own data
 
@@ -94,14 +98,31 @@ model = mlflow.pyfunc.load_model("models:/retail-demand-xgb@champion")
 model.predict(feature_rows)   # columns = retail_forecast.features.FEATURES; ids as plain strings
 ```
 
+## Dashboard
+
+http://localhost:8501. It gets everything from the API (`API_URL`) and holds no model code.
+
+- **Product forecast:** pick a product to see recent actuals (promo days marked), the 30-day
+  forecast with its 80% band, totals against the last 30 days, and a downloadable daily table.
+- **All products:** forecast units by category, the products with the biggest forecast changes
+  vs. the last period, and a sortable table of every product's forecast.
+- **Sales analytics:** revenue KPIs, monthly revenue by category, revenue share, promo lift,
+  and top products.
+- **Model:** backtest metrics vs. the naive baseline, model and champion version, and links to
+  the MLflow run and registry (`MLFLOW_UI_URL`, default http://localhost:5000).
+
+Sidebar filters (category, ABC class, history window) apply across tabs. Data is cached for
+60 seconds; **Refresh data** reloads it after a retrain.
+
 ## API
 
 | Endpoint | Returns |
 |---|---|
 | `GET /health` | status, and whether a forecast is ready |
 | `GET /model` | MLflow run id, model version, champion flag, backtest metrics |
-| `GET /forecast?category=` | per-product 30-day totals, with 80% bounds |
+| `GET /forecast?category=` | per-product 30-day totals with 80% bounds, and actuals for the previous 30 days |
 | `GET /forecast/{product_id}` | daily forecast with lower/upper bounds, price and promo |
+| `GET /history/{product_id}?days=` | daily actual sales, price and promo flag |
 | `GET /products?category=&abc_class=` | product catalogue with ABC class |
 | `GET /analytics/summary` | revenue/unit KPIs, change vs. prior 30 days and same period last year |
 | `GET /analytics/categories` | revenue share and growth by category |
@@ -120,6 +141,7 @@ pip install -r requirements-dev.txt
 make test          # unit + API tests
 make train-local   # tracks to sqlite:///mlflow.db; view with: mlflow ui --backend-store-uri sqlite:///mlflow.db
 make api-local
+make dashboard-local   # needs: pip install -r dashboard/requirements.txt
 ```
 
 Configuration is read from environment variables: `DATA_PATH`, `OUTPUT_DIR`, `FORECAST_HORIZON`,
@@ -139,6 +161,7 @@ src/retail_forecast/
   serving.py     MLflow pyfunc wrapper for the registered model
   pipeline.py    training job (entry point)
   api.py         FastAPI service
-docker/          app + MLflow images
+dashboard/       Streamlit app (talks to the API only)
+docker/          app, MLflow and dashboard images
 tests/           pytest suite
 ```
