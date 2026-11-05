@@ -1,0 +1,92 @@
+name: retail-forecast
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: docker/app.Dockerfile
+  image: retail-forecast-app:latest
+  environment: &app-env
+    MLFLOW_TRACKING_URI: http://mlflow:5000
+    MLFLOW_EXPERIMENT: ${MLFLOW_EXPERIMENT:-retail-demand-forecast}
+    MLFLOW_REGISTERED_MODEL: ${MLFLOW_REGISTERED_MODEL:-retail-demand-xgb}
+    DATA_PATH: /app/data/sales.csv
+    OUTPUT_DIR: /app/outputs
+    FORECAST_HORIZON: ${FORECAST_HORIZON:-30}
+    BACKTEST_FOLDS: ${BACKTEST_FOLDS:-3}
+    SYNTHETIC_PRODUCTS: ${SYNTHETIC_PRODUCTS:-40}
+  volumes:
+    - ./data:/app/data
+    - ./outputs:/app/outputs
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlflow}
+      POSTGRES_DB: mlflow
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: docker/mlflow.Dockerfile
+    image: retail-forecast-mlflow:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      mlflow server
+      --host 0.0.0.0 --port 5000
+      --backend-store-uri postgresql+psycopg2://mlflow:${POSTGRES_PASSWORD:-mlflow}@postgres:5432/mlflow
+      --artifacts-destination /mlartifacts
+      --serve-artifacts
+      --allowed-hosts mlflow,mlflow:5000,localhost,localhost:${MLFLOW_PORT:-5000},127.0.0.1,127.0.0.1:${MLFLOW_PORT:-5000}
+      --workers 2
+    ports:
+      - "${MLFLOW_PORT:-5000}:5000"
+    volumes:
+      - mlflow-artifacts:/mlartifacts
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    restart: unless-stopped
+
+  # One-shot job: generates data if needed, runs analytics, backtest, trains,
+  # forecasts, logs everything to MLflow and exits. Re-run with:
+  #   docker compose run --rm trainer
+  trainer:
+    <<: *app
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *app
+    command: ["uvicorn", "retail_forecast.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      trainer:
+        condition: service_completed_successfully
+    ports:
+      - "${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pg-data:
+  mlflow-artifacts:
