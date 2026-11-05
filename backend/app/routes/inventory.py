@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/inventory", tags=["inventory"], responses=ERROR_
 def reorders(
     priority: list[Literal["critical", "high", "medium", "low"]] | None = Query(None),
     category: list[str] | None = Query(None), q: str | None = None,
-    actionable_only: bool = Query(True, description="Only products with a suggested order quantity > 0"),
+    actionable_only: bool = Query(True, description="Only products that need an order or are at critical stock-out risk"),
     sort: Literal["priority", "stockout_date", "reorder_quantity", "days_of_cover"] = "priority",
     page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=500),
     conn: Connection = Depends(get_db),

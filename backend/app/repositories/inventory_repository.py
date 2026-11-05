@@ -34,8 +34,8 @@ def reorders(conn: Connection, priority: list[str] | None, category: list[str] |
     if q:
         where.append("(p.sku ILIKE :like OR p.name ILIKE :like)")
         params["like"] = f"%{q}%"
-    if actionable_only:
-        where.append("rr.reorder_quantity > 0")
+    if actionable_only:  # needs an order, or will run out before stock can arrive
+        where.append("(rr.reorder_quantity > 0 OR rr.priority = 'critical')")
     order = {
         "priority": "CASE rr.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, "
                     "rr.predicted_stockout_date NULLS LAST, rr.days_of_cover NULLS LAST",
@@ -55,5 +55,5 @@ def reorders(conn: Connection, priority: list[str] | None, category: list[str] |
 def priority_counts(conn: Connection) -> dict[str, int]:
     rows = fetch_all(conn, """SELECT priority, count(*) AS n FROM reorder_recommendations rr
                               JOIN latest_production_run r USING (run_id)
-                              WHERE rr.reorder_quantity > 0 GROUP BY 1""")
+                              WHERE rr.reorder_quantity > 0 OR rr.priority = 'critical' GROUP BY 1""")
     return {r["priority"]: r["n"] for r in rows}
