@@ -11,3 +11,4 @@
 |---|---|
 | 1. Database & source | PostgreSQL schema and migrations (`database/`), mock OData v4 service with a simulated retailer (`mock_odata/`) |
 | 2. Airflow ETL | `retail_etl` DAG: extract (OData + CSV drop-zone) → clean → validate (quarantine, critical stop) → transform → idempotent load → status; `forecast_training` DAG (`airflow/`) |
+| 3. FastAPI backend | `backend/app`: routes, services, repositories, schemas, models; product search, sales/prices, forecasts, inventory, analytics, reports (CSV/Excel), pipeline status, async training jobs with API key |
