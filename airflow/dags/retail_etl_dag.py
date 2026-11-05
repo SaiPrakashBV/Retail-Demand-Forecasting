@@ -10,9 +10,9 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pendulum
-from airflow.exceptions import AirflowFailException
 from airflow.providers.standard.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.sdk import dag, get_current_context, task
+from airflow.sdk.exceptions import AirflowFailException
 
 
 def _mark_failed(context) -> None:

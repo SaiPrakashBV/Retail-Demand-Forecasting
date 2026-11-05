@@ -4,11 +4,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mock_odata.generator import simulate
 from ml.evaluate import backtest_cutoffs, metrics
 from ml.predict import combine
 from ml.train_demand import ProphetDemandModel, XGBoostDemandModel, eligible_skus, run_backtest
-from ml.train_price import (NaivePriceModel, XGBoostPriceModel, eligible_price_skus, run_price_backtest)
+from ml.train_price import NaivePriceModel, XGBoostPriceModel, eligible_price_skus, run_price_backtest
+from mock_odata.generator import simulate
 
 FAST_XGB = {"objective": "reg:tweedie", "n_estimators": 40, "max_depth": 4, "tree_method": "hist",
             "max_cat_to_onehot": 1}

@@ -14,7 +14,7 @@ import type { Priority, ReorderItem } from "../api/types";
 import { KpiCard, PageHeader, PriorityChip } from "../components/Common";
 import { MultiSelect } from "../components/Filters";
 import { EmptyState, LoadingBlock, QueryView } from "../components/StateViews";
-import { fmtDate, fmtMoney, fmtNumber } from "../utils/format";
+import { fmtMoney, fmtNumber, fmtShortDate } from "../utils/format";
 
 const PRIORITIES: Priority[] = ["critical", "high", "medium", "low"];
 const PAGE = 50;
@@ -72,10 +72,10 @@ export default function InventoryPage() {
               <Table size="small">
                 <TableHead><TableRow>
                   <TableCell padding="checkbox" /><TableCell>Product</TableCell><TableCell>Priority</TableCell>
-                  <TableCell align="right">Available</TableCell><TableCell align="right">Incoming</TableCell>
+                  <TableCell align="right">On hand</TableCell><TableCell align="right">Incoming</TableCell>
                   <TableCell align="right">Position</TableCell><TableCell align="right">Reorder point</TableCell>
-                  <TableCell align="right">Days of cover</TableCell><TableCell>Predicted stock-out</TableCell>
-                  <TableCell align="right">Suggested order</TableCell><TableCell align="right">Order value</TableCell>
+                  <TableCell align="right">Cover (days)</TableCell><TableCell>Stock-out</TableCell>
+                  <TableCell align="right">Order qty</TableCell><TableCell align="right">Value</TableCell>
                 </TableRow></TableHead>
                 <TableBody>{d.items.map((r) => <ReorderRow key={r.sku} r={r} />)}</TableBody>
               </Table>
@@ -113,7 +113,7 @@ function ReorderRow({ r }: { r: ReorderItem }) {
         <TableCell align="right">{fmtNumber(r.inventory_position)}</TableCell>
         <TableCell align="right">{fmtNumber(r.reorder_point)}</TableCell>
         <TableCell align="right">{fmtNumber(r.days_of_cover, 1)}</TableCell>
-        <TableCell>{r.predicted_stockout_date ? fmtDate(r.predicted_stockout_date) : "Not within 30 days"}</TableCell>
+        <TableCell sx={{ whiteSpace: "nowrap" }}>{r.predicted_stockout_date ? fmtShortDate(r.predicted_stockout_date) : "None in 30 days"}</TableCell>
         <TableCell align="right">
           {r.reorder_quantity ? <Typography sx={{ fontWeight: 700 }} variant="body2">{fmtNumber(r.reorder_quantity)}</Typography>
             : <Chip size="small" variant="outlined" label="Expedite incoming" />}

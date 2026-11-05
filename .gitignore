@@ -1,11 +1,11 @@
 __pycache__/
 .pytest_cache/
+.ruff_cache/
 .venv/
+*.db
 mlruns/
 mlartifacts/
-mlflow.db
-data/*
-!data/.gitkeep
-outputs/*
-!outputs/.gitkeep
+outputs/
 .env
+data/incoming/*
+!data/incoming/README.md

@@ -1,0 +1,3 @@
+sku,name,category,brand,current_price,unit_cost,supplier_lead_time_days,min_order_qty,pack_size
+SKU-2001,Northway Trail Shoes,Fashion,Northway,94.99,52.00,10,24,6
+SKU-2002,Brightline Desk Fan,Home,Brightline,39.99,21.50,7,12,4

@@ -3,5 +3,5 @@ mlflow==3.18.0
 xgboost==3.4.1
 prophet==1.5.0
 holidays==0.108
-joblib==1.5.3
+joblib==1.6.0
 matplotlib==3.11.2

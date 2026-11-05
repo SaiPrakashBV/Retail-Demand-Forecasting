@@ -12,9 +12,9 @@ from datetime import timedelta
 
 import pendulum
 import requests
-from airflow.exceptions import AirflowFailException
 from airflow.sdk import dag, get_current_context, task
 from airflow.sdk.bases.sensor import PokeReturnValue
+from airflow.sdk.exceptions import AirflowFailException
 
 API_URL = os.environ.get("RETAIL_API_URL", "http://api:8000").rstrip("/")
 

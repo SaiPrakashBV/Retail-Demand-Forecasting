@@ -6,7 +6,7 @@ schema so the two cannot drift apart silently.
 
 from __future__ import annotations
 
-from sqlalchemy import (Boolean, Column, Date, DateTime, Float, Integer, MetaData, Numeric, Table, Text)
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, Integer, MetaData, Numeric, Table, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 metadata = MetaData()

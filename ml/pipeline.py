@@ -9,14 +9,14 @@ import logging
 import sys
 import uuid
 from collections.abc import Callable
-from datetime import datetime, time, timezone
+from datetime import UTC, datetime, time
 from pathlib import Path
 
 import mlflow
-import pandas as pd
 from sqlalchemy import create_engine, text
 
-from . import forecast_store, mlflow_tracking as track, model_registry
+from . import forecast_store, model_registry
+from . import mlflow_tracking as track
 from .config import MlSettings
 from .data import load_daily, load_prices
 from .evaluate import per_product
@@ -83,7 +83,7 @@ def run_training(settings: MlSettings | None = None, job_id: str | None = None, 
     price_model, price_fc, price_skus = production_price(prices, price_model_name or "naive_last_regular", price_bt,
                                                          horizon, s.min_price_history_days, s.seed, s.n_jobs)
     frame = combine(demand_fc, price_fc)
-    generated_at = datetime.now(timezone.utc)
+    generated_at = datetime.now(UTC)
 
     # 4) MLflow ---------------------------------------------------------------------------
     progress("tracking", 76, "Logging runs, metrics and models to MLflow")
@@ -167,7 +167,7 @@ def run_training(settings: MlSettings | None = None, job_id: str | None = None, 
                                                products=bt_frame["sku"].nunique(),
                                                metrics={"demand": fold.drop(columns=["model"]).to_dict("records")},
                                                **common)
-            as_of = datetime.combine(cutoff.date(), time(23, 59), tzinfo=timezone.utc)
+            as_of = datetime.combine(cutoff.date(), time(23, 59), tzinfo=UTC)
             forecast_store.insert_forecasts(conn, bt_run, bt_frame, sku_to_id, as_of, demand_run_id)
         pruned = forecast_store.prune_backtest_runs(conn, job_id)
 

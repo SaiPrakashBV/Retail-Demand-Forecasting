@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient
 
 from mock_odata.app import app
 from tasks.clean_data import clean_all, clean_entity
-from tasks.extract_odata import extract_csv, fetch_entity_set, incremental_filter, read_raw
 from tasks.common import EtlSettings
+from tasks.extract_odata import extract_csv, fetch_entity_set, incremental_filter, read_raw
 from tasks.transform_data import transform
 from tasks.validate_data import validate
 

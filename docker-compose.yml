@@ -1,59 +1,123 @@
-name: retail-forecast
+name: retail-analytics
+
+# Startup order:
+#   postgres -> migrate -> (mock-odata, mlflow, api, forecast-worker, airflow-init)
+#   airflow-init -> airflow-api-server, airflow-scheduler, airflow-dag-processor
+#   airflow-bootstrap triggers the first retail_etl run, which then triggers forecast_training;
+#   the API queues the job and forecast-worker trains and publishes forecasts.
+#   frontend serves the React app and proxies /api to the api service.
+
+x-db-url: &retail-db postgresql+psycopg2://${POSTGRES_USER:-retail}:${POSTGRES_PASSWORD:-retail}@postgres:5432/retail
 
 x-app: &app
   build:
     context: .
     dockerfile: docker/app.Dockerfile
-  image: retail-forecast-app:latest
-  environment: &app-env
-    MLFLOW_TRACKING_URI: http://mlflow:5000
-    MLFLOW_EXPERIMENT: ${MLFLOW_EXPERIMENT:-retail-demand-forecast}
-    MLFLOW_REGISTERED_MODEL: ${MLFLOW_REGISTERED_MODEL:-retail-demand-xgb}
-    DATA_PATH: /app/data/sales.csv
-    OUTPUT_DIR: /app/outputs
-    FORECAST_HORIZON: ${FORECAST_HORIZON:-30}
-    BACKTEST_FOLDS: ${BACKTEST_FOLDS:-3}
-    SYNTHETIC_PRODUCTS: ${SYNTHETIC_PRODUCTS:-40}
+  image: retail-analytics-app:latest
+  restart: unless-stopped
+
+x-airflow: &airflow
+  build:
+    context: .
+    dockerfile: docker/airflow.Dockerfile
+  image: retail-analytics-airflow:latest
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-retail}:${POSTGRES_PASSWORD:-retail}@postgres:5432/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "False"
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-change-me-local-dev-jwt-secret}
+    AIRFLOW__API__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-change-me-local-dev-secret}
+    # Local development: the UI opens without a login. Set to False and define users for shared use.
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: ${AIRFLOW_ALL_ADMINS:-True}
+    AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: "30"
+    # Used by the ETL tasks and the forecast_training DAG
+    RETAIL_DATABASE_URL: *retail-db
+    ODATA_BASE_URL: http://mock-odata:8080/odata
+    RETAIL_API_URL: http://api:8000
+    TRAIN_API_KEY: ${TRAIN_API_KEY:-local-dev-train-key}
+    ETL_WORK_DIR: /opt/airflow/etl-data
+    CSV_INCOMING_DIR: /opt/airflow/incoming
+    ETL_MAX_INVALID_RATIO: ${ETL_MAX_INVALID_RATIO:-0.05}
   volumes:
-    - ./data:/app/data
-    - ./outputs:/app/outputs
+    - ./airflow/dags:/opt/airflow/project/dags
+    - ./airflow/tasks:/opt/airflow/project/tasks
+    - ./data/incoming:/opt/airflow/incoming
+    - etl-data:/opt/airflow/etl-data
+    - airflow-logs:/opt/airflow/logs
+  depends_on: &airflow-deps
+    postgres:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+  restart: unless-stopped
 
 services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: mlflow
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlflow}
-      POSTGRES_DB: mlflow
+      POSTGRES_USER: ${POSTGRES_USER:-retail}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-retail}
+      POSTGRES_DB: retail
     volumes:
       - pg-data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-retail} -d retail"]
       interval: 5s
       timeout: 5s
-      retries: 20
+      retries: 30
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: ["python", "database/migrate.py"]
+    environment:
+      DATABASE_URL: *retail-db
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  mock-odata:
+    build:
+      context: .
+      dockerfile: docker/mock-odata.Dockerfile
+    image: retail-analytics-mock-odata:latest
+    environment:
+      MOCK_PRODUCTS: ${MOCK_PRODUCTS:-80}
+      MOCK_AS_OF: ${MOCK_AS_OF:-}
+    ports:
+      - "${ODATA_PORT:-8081}:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
     restart: unless-stopped
 
   mlflow:
     build:
       context: .
       dockerfile: docker/mlflow.Dockerfile
-    image: retail-forecast-mlflow:latest
-    depends_on:
-      postgres:
-        condition: service_healthy
+    image: retail-analytics-mlflow:latest
     command: >
-      mlflow server
-      --host 0.0.0.0 --port 5000
-      --backend-store-uri postgresql+psycopg2://mlflow:${POSTGRES_PASSWORD:-mlflow}@postgres:5432/mlflow
-      --artifacts-destination /mlartifacts
-      --serve-artifacts
+      mlflow server --host 0.0.0.0 --port 5000
+      --backend-store-uri postgresql+psycopg2://${POSTGRES_USER:-retail}:${POSTGRES_PASSWORD:-retail}@postgres:5432/mlflow
+      --artifacts-destination /mlartifacts --serve-artifacts --workers 2
       --allowed-hosts mlflow,mlflow:5000,localhost,localhost:${MLFLOW_PORT:-5000},127.0.0.1,127.0.0.1:${MLFLOW_PORT:-5000}
-      --workers 2
     ports:
       - "${MLFLOW_PORT:-5000}:5000"
     volumes:
       - mlflow-artifacts:/mlartifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 10s
@@ -62,48 +126,110 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  # One-shot job: generates data if needed, runs analytics, backtest, trains,
-  # forecasts, logs everything to MLflow and exits. Re-run with:
-  #   docker compose run --rm trainer
-  trainer:
-    <<: *app
-    depends_on:
-      mlflow:
-        condition: service_healthy
-    restart: "no"
-
   api:
     <<: *app
-    command: ["uvicorn", "retail_forecast.api:app", "--host", "0.0.0.0", "--port", "8000"]
-    depends_on:
-      trainer:
-        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: *retail-db
+      TRAIN_API_KEY: ${TRAIN_API_KEY:-local-dev-train-key}
+      CORS_ORIGINS: http://localhost:${FRONTEND_PORT:-3000},http://localhost:5173
+      MLFLOW_UI_URL: http://localhost:${MLFLOW_PORT:-5000}
+      AIRFLOW_UI_URL: http://localhost:${AIRFLOW_PORT:-8080}
     ports:
       - "${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
-      retries: 10
-    restart: unless-stopped
+      retries: 20
 
-  dashboard:
+  forecast-worker:
+    <<: *app
+    command: ["python", "-m", "ml.worker"]
+    environment:
+      DATABASE_URL: *retail-db
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      FORECAST_HORIZON: ${FORECAST_HORIZON:-30}
+      BACKTEST_FOLDS: ${BACKTEST_FOLDS:-3}
+      DEMAND_MODELS: ${DEMAND_MODELS:-xgboost,prophet}
+      ML_N_JOBS: ${ML_N_JOBS:-4}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mlflow:
+        condition: service_healthy
+    stop_grace_period: 5m
+
+  airflow-init:
+    <<: *airflow
+    entrypoint: /bin/bash
+    command: ["-c", "airflow db migrate && echo 'Airflow metadata database ready'"]
+    restart: "no"
+
+  airflow-api-server:
+    <<: *airflow
+    command: api-server
+    ports:
+      - "${AIRFLOW_PORT:-8080}:8080"
+    depends_on:
+      <<: *airflow-deps
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  airflow-scheduler:
+    <<: *airflow
+    command: scheduler
+    depends_on:
+      <<: *airflow-deps
+      airflow-init:
+        condition: service_completed_successfully
+      airflow-api-server:
+        condition: service_healthy
+
+  airflow-dag-processor:
+    <<: *airflow
+    command: dag-processor
+    depends_on:
+      <<: *airflow-deps
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-bootstrap:
+    <<: *airflow
+    entrypoint: /bin/bash
+    command: ["/opt/airflow/bootstrap.sh"]
+    depends_on:
+      airflow-scheduler:
+        condition: service_started
+      airflow-dag-processor:
+        condition: service_started
+      mock-odata:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: "no"
+
+  frontend:
     build:
       context: .
-      dockerfile: docker/dashboard.Dockerfile
-    image: retail-forecast-dashboard:latest
-    environment:
-      API_URL: http://api:8000
-      # Browser-facing MLflow URL used for links in the dashboard.
-      MLFLOW_UI_URL: ${MLFLOW_UI_URL:-http://localhost:5000}
+      dockerfile: docker/frontend.Dockerfile
+    image: retail-analytics-frontend:latest
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
     depends_on:
       api:
         condition: service_healthy
-    ports:
-      - "${DASHBOARD_PORT:-8501}:8501"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
-      interval: 10s
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 15s
       timeout: 5s
       retries: 10
     restart: unless-stopped
@@ -111,3 +237,5 @@ services:
 volumes:
   pg-data:
   mlflow-artifacts:
+  etl-data:
+  airflow-logs:

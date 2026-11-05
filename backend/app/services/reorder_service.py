@@ -73,7 +73,7 @@ def compute_recommendation(
     horizon = len(demand)
 
     if daily_error_sd is None:
-        widths = [(u - lo) / (2 * Z_80) for lo, u in zip(demand_lower or [], demand_upper or [])
+        widths = [(u - lo) / (2 * Z_80) for lo, u in zip(demand_lower or [], demand_upper or [], strict=False)
                   if lo is not None and u is not None]
         # No interval at all: assume Poisson-like noise around the forecast.
         daily_error_sd = (sum(widths) / len(widths)) if widths else math.sqrt(max(sum(demand) / max(horizon, 1), 0))

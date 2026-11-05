@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.engine import Connection
@@ -24,11 +24,11 @@ def status(limit: int = Query(15, ge=1, le=100), conn: Connection = Depends(get_
     last_ok = pipeline_repository.last_successful_run(conn)
     rng = sales_repository.data_range(conn) or {}
     latest_run = forecast_repository.latest_run(conn)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     data_end = rng.get("end")
     lag_hours = None
     if data_end:
-        end_of_day = datetime.combine(data_end, datetime.max.time(), tzinfo=timezone.utc)
+        end_of_day = datetime.combine(data_end, datetime.max.time(), tzinfo=UTC)
         lag_hours = round(max((now - end_of_day).total_seconds(), 0) / 3600, 1)
     latest_quarantine = (pipeline_repository.quarantine_summary(conn, runs[0]["pipeline_id"]) if runs else [])
     return {

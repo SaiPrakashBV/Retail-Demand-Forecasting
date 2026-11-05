@@ -76,7 +76,7 @@ def main() -> int:
         pending.append((version, name, path, checksum))
 
     if args.check:
-        for v, _, p, _ in pending:
+        for _v, _, p, _ in pending:
             print(f"pending: {p.name}")
         return 1 if pending else 0
 

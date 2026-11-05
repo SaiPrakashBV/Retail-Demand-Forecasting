@@ -41,7 +41,7 @@ def _where(f: ProductFilters) -> tuple[str, dict]:
         if values:
             keys = [f"{name}_{i}" for i in range(len(values))]
             clauses.append(f"lower({col}) IN ({', '.join(':' + k for k in keys)})")
-            params.update({k: v.lower() for k, v in zip(keys, values)})
+            params.update({k: v.lower() for k, v in zip(keys, values, strict=True)})
     for attr, col, op in (("min_price", "current_price", ">="), ("max_price", "current_price", "<="),
                           ("min_forecast", "forecast_demand_30d", ">="), ("max_forecast", "forecast_demand_30d", "<=")):
         v = getattr(f, attr)

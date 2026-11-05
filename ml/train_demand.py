@@ -71,7 +71,7 @@ class XGBoostDemandModel:
     residuals: pd.DataFrame | None = None  # per-product error quantiles -> intervals
     relative_band: tuple[float, float] | None = None  # fallback for products missing from the backtest
 
-    def fit(self, history: pd.DataFrame) -> "XGBoostDemandModel":
+    def fit(self, history: pd.DataFrame) -> XGBoostDemandModel:
         self.categories = category_levels(history)
         feats = build_demand_features(history, self.categories)
         train = feats.dropna(subset=["lag_28", TARGET])
@@ -161,7 +161,7 @@ class ProphetDemandModel:
     n_jobs: int = 4
     models: dict = field(default_factory=dict)
 
-    def fit(self, history: pd.DataFrame) -> "ProphetDemandModel":
+    def fit(self, history: pd.DataFrame) -> ProphetDemandModel:
         return self  # Prophet is fitted per product inside forecast(), in parallel
 
     @staticmethod
@@ -191,7 +191,7 @@ class ProphetDemandModel:
             f = fut[fut["sku"].astype(str) == sku]
             pred = m.predict(pd.DataFrame({"ds": f["date"], "on_promo": f["on_promo"], "price_ratio": f["price_ratio"]}))
             smear = getattr(m, "smearing_factor", 1.0)
-            back = lambda v: np.clip(np.exp(v.to_numpy()) * smear - 1, 0, None)  # noqa: E731
+            back = lambda v, s=smear: np.clip(np.exp(v.to_numpy()) * s - 1, 0, None)  # noqa: E731
             out.append(pd.DataFrame({"date": f["date"].to_numpy(), "sku": sku, "forecast": back(pred["yhat"]),
                                      "lower": back(pred["yhat_lower"]), "upper": back(pred["yhat_upper"])}))
         return pd.concat(out, ignore_index=True)

@@ -1,9 +1,11 @@
 .git
 **/__pycache__
-.pytest_cache
-data
+**/.pytest_cache
+**/node_modules
+frontend/dist
 outputs
 mlruns
 mlartifacts
-mlflow.db
+*.db
 .venv
+data/incoming/processed

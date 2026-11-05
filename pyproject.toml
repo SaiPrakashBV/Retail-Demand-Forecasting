@@ -14,5 +14,12 @@ filterwarnings = [
 markers = ["integration: needs a PostgreSQL database (TEST_DATABASE_URL)"]
 
 [tool.ruff]
-line-length = 120
+line-length = 140
 target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["B008"]  # FastAPI dependencies are declared as argument defaults
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "ml", "tasks", "mock_odata"]

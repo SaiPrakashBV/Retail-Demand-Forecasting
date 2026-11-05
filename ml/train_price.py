@@ -82,7 +82,7 @@ class NaivePriceModel:
     name: str = "naive_last_regular"
     residuals: pd.DataFrame | None = None
 
-    def fit(self, prices: pd.DataFrame) -> "NaivePriceModel":
+    def fit(self, prices: pd.DataFrame) -> NaivePriceModel:
         return self
 
     def forecast(self, prices: pd.DataFrame, horizon: int) -> pd.DataFrame:
@@ -117,7 +117,7 @@ class XGBoostPriceModel:
             df[c] = pd.Categorical(df[c].astype(str), categories=self.categories[c])
         return df
 
-    def fit(self, prices: pd.DataFrame) -> "XGBoostPriceModel":
+    def fit(self, prices: pd.DataFrame) -> XGBoostPriceModel:
         grid = daily_price_grid(prices)
         self.categories = {c: sorted(grid[c].astype(str).unique()) for c in ("sku", "category")}
         end = grid["date"].max()

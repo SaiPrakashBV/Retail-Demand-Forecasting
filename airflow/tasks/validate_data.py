@@ -109,7 +109,7 @@ def validate(frames: dict[str, pd.DataFrame], known_skus: set[str], max_invalid_
 
 def _collect(result: ValidationResult, entity: str, df: pd.DataFrame, reasons: pd.Series) -> None:
     bad = reasons.notna()
-    for raw, reason in zip(df.loc[bad, "_raw"], reasons[bad]):
+    for raw, reason in zip(df.loc[bad, "_raw"], reasons[bad], strict=True):
         result.quarantine.append({"entity": entity, "reason": reason, "record": raw})
     result.valid[entity] = df.loc[~bad].drop(columns=["_raw"]).reset_index(drop=True)
     n = len(df)
